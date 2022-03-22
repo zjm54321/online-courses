@@ -1,32 +1,59 @@
-name: Release Drafter
-
+name: CI
+ 
 on:
   push:
-    # branches to consider in the event; optional, defaults to all
-    branches:
-      - master
-  # pull_request event is required only for autolabeler
-  pull_request:
-    # Only following types are handled by the action, but one can default to all as well
-    types: [opened, reopened, synchronize]
-  # pull_request_target event is required for autolabeler to support PRs from forks
-  # pull_request_target:
-  #   types: [opened, reopened, synchronize]
-
+    tags:
+    - '*'
+ 
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  update_release_draft:
+  # This workflow contains a single job called "build"
+  build:
+    # The type of runner that the job will run on
     runs-on: ubuntu-latest
+ 
+    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # (Optional) GitHub Enterprise requires GHE_HOST variable set
-      #- name: Set GHE_HOST
-      #  run: |
-      #    echo "GHE_HOST=${GITHUB_SERVER_URL##https:\/\/}" >> $GITHUB_ENV
-
-      # Drafts your next Release notes as Pull Requests are merged into "master"
-      - uses: release-drafter/release-drafter@v5
-        # (Optional) specify config name to use, relative to .github/. Default: release-drafter.yml
-        # with:
-        #   config-name: my-config.yml
-        #   disable-autolabeler: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+    - uses: actions/checkout@v2
+ 
+    - name: Setup Node
+      uses: actions/setup-node@v1
+      with:
+          node-version: '10.x'
+ 
+    - name: Cache multiple paths
+      uses: actions/cache@v2
+      with:
+        path: |
+          ~/cache
+          !~/cache/exclude
+          **/node_modules
+        key: ${{ runner.os }}-${{ hashFiles('**/lockfiles') }}
+ 
+    - name: Install Dependencies
+      run: ./scripts/update-dependencies
+ 
+    - name: Build Static
+      run: ./scripts/build-static -s
+ 
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        draft: false
+        prerelease: false
+    - name: Upload Release Asset
+      id: upload-release-asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps
+        asset_path: dist/static/master-dev.tar.gz
+        asset_name: ${{ github.ref }}.tar.gz
+        asset_content_type: application/gzip
