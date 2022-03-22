@@ -1,7 +1,7 @@
 name: Release
 on:
-  schedule:
-    - cron: '30 21 * * *'
+  push:
+    branches: [ master ]
 jobs:
   build:
     name: Release
